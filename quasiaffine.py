@@ -14,7 +14,6 @@ class AffineExprKind(Enum):
     CEIL_DIV = "CeilDiv"
     CONSTANT = "Constant"
     DIM_ID = "DimId"
-    SYMBOL_ID = "SymbolId"
 
 
 class AffineExpr(ABC):
@@ -42,9 +41,9 @@ class AffineExpr(ABC):
     def _equals_impl(self, other) -> bool:
         pass
 
-    def is_symbolic_or_constant(self) -> bool:
+    def is_constant(self) -> bool:
         kind = self.get_kind()
-        if kind == AffineExprKind.CONSTANT or kind == AffineExprKind.SYMBOL_ID:
+        if kind == AffineExprKind.CONSTANT:
             return True
         elif kind == AffineExprKind.DIM_ID:
             return False
@@ -56,16 +55,12 @@ class AffineExpr(ABC):
             AffineExprKind.MOD,
         ]:
             bin_expr = self
-            return (
-                bin_expr.get_lhs().is_symbolic_or_constant()
-                and bin_expr.get_rhs().is_symbolic_or_constant()
-            )
+            return bin_expr.get_lhs().is_constant() and bin_expr.get_rhs().is_constant()
         return False
 
     def is_pure_affine(self) -> bool:
         kind = self.get_kind()
         if kind in [
-            AffineExprKind.SYMBOL_ID,
             AffineExprKind.DIM_ID,
             AffineExprKind.CONSTANT,
         ]:
@@ -93,7 +88,7 @@ class AffineExpr(ABC):
 
     def get_largest_known_divisor(self) -> int:
         kind = self.get_kind()
-        if kind in [AffineExprKind.DIM_ID, AffineExprKind.SYMBOL_ID]:
+        if kind in [AffineExprKind.DIM_ID]:
             return 1
         elif kind == AffineExprKind.CONSTANT:
             return abs(self.get_value())
@@ -119,7 +114,7 @@ class AffineExpr(ABC):
 
     def is_multiple_of(self, factor: int) -> bool:
         kind = self.get_kind()
-        if kind in [AffineExprKind.SYMBOL_ID, AffineExprKind.DIM_ID]:
+        if kind in [AffineExprKind.DIM_ID]:
             return factor * factor == 1
         elif kind == AffineExprKind.CONSTANT:
             return self.get_value() % factor == 0
@@ -144,15 +139,6 @@ class AffineExpr(ABC):
             return self.get_lhs().is_function_of_dim(
                 position
             ) or self.get_rhs().is_function_of_dim(position)
-        return False
-
-    def is_function_of_symbol(self, position: int) -> bool:
-        if self.get_kind() == AffineExprKind.SYMBOL_ID:
-            return self.get_position() == position
-        elif isinstance(self, AffineBinaryOpExpr):
-            return self.get_lhs().is_function_of_symbol(
-                position
-            ) or self.get_rhs().is_function_of_symbol(position)
         return False
 
     def __add__(self, other):
@@ -209,9 +195,7 @@ class AffineExpr(ABC):
             AffineExprKind.MOD, self, other
         )
 
-    def replace_dims_and_symbols(
-        self, dim_replacements: List["AffineExpr"], sym_replacements: List["AffineExpr"]
-    ) -> "AffineExpr":
+    def replace_dims(self, dim_replacements: List["AffineExpr"]) -> "AffineExpr":
         kind = self.get_kind()
         if kind == AffineExprKind.CONSTANT:
             return self
@@ -220,31 +204,16 @@ class AffineExpr(ABC):
             if pos < len(dim_replacements):
                 return dim_replacements[pos]
             return self
-        elif kind == AffineExprKind.SYMBOL_ID:
-            pos = self.get_position()
-            if pos < len(sym_replacements):
-                return sym_replacements[pos]
-            return self
         elif isinstance(self, AffineBinaryOpExpr):
-            new_lhs = self.get_lhs().replace_dims_and_symbols(
-                dim_replacements, sym_replacements
-            )
-            new_rhs = self.get_rhs().replace_dims_and_symbols(
-                dim_replacements, sym_replacements
-            )
+            new_lhs = self.get_lhs().replace_dims(dim_replacements)
+            new_rhs = self.get_rhs().replace_dims(dim_replacements)
             if new_lhs == self.get_lhs() and new_rhs == self.get_rhs():
                 return self
             return get_affine_binary_op_expr(kind, new_lhs, new_rhs)
         return self
 
-    def replace_dims(self, dim_replacements: List["AffineExpr"]) -> "AffineExpr":
-        return self.replace_dims_and_symbols(dim_replacements, [])
-
-    def replace_symbols(self, sym_replacements: List["AffineExpr"]) -> "AffineExpr":
-        return self.replace_dims_and_symbols([], sym_replacements)
-
     def replace(self, expr_map: Dict["AffineExpr", "AffineExpr"]) -> "AffineExpr":
-        if (isinstance(self, Dim) or isinstance(self, Symbol)) and self in expr_map:
+        if isinstance(self, Dim) and self in expr_map:
             return expr_map[self]
 
         if isinstance(self, AffineBinaryOpExpr):
@@ -322,29 +291,6 @@ class Dim(AffineExpr):
         return hash(self._to_string())
 
 
-class Symbol(AffineExpr):
-
-    def __init__(self, position: int):
-        self._position = position
-
-    def get_kind(self) -> AffineExprKind:
-        return AffineExprKind.SYMBOL_ID
-
-    def get_position(self) -> int:
-        return self._position
-
-    def _equals_impl(self, other) -> bool:
-        if not isinstance(other, Symbol):
-            return False
-        return self._position == other._position
-
-    def _to_string(self) -> str:
-        return f"s{self._position}"
-
-    def __hash__(self):
-        return hash(self._to_string())
-
-
 class Constant(AffineExpr):
 
     def __init__(self, value: int):
@@ -391,7 +337,7 @@ def _simplify_add(lhs: AffineExpr, rhs: AffineExpr) -> Optional[AffineExpr]:
         return Constant(lhs.get_value() + rhs.get_value())
 
     # Canonicalize: constant on right (4 + d0 becomes d0 + 4)
-    if lhs.is_symbolic_or_constant() and not rhs.is_symbolic_or_constant():
+    if lhs.is_constant() and not rhs.is_constant():
         return _simplify_add(rhs, lhs) or AffineBinaryOpExpr(
             AffineExprKind.ADD, rhs, lhs
         )
@@ -412,8 +358,8 @@ def _simplify_mul(lhs: AffineExpr, rhs: AffineExpr) -> Optional[AffineExpr]:
     if isinstance(lhs, Constant) and isinstance(rhs, Constant):
         return Constant(lhs.get_value() * rhs.get_value())
 
-    # Canonicalize: symbolic/constant on right
-    if lhs.is_symbolic_or_constant() and not rhs.is_symbolic_or_constant():
+    # Canonicalize: constant on right
+    if lhs.is_constant() and not rhs.is_constant():
         return _simplify_mul(rhs, lhs) or AffineBinaryOpExpr(
             AffineExprKind.Mul, rhs, lhs
         )
@@ -500,34 +446,20 @@ def bind_dims(*names) -> List[Dim]:
     return [Dim(i) for i in range(len(names))]
 
 
-def bind_symbols(*names) -> List[Symbol]:
-    return [Symbol(i) for i in range(len(names))]
-
-
 def get_constants(constants: List[int]) -> List[Constant]:
     return [Constant(c) for c in constants]
 
 
 if __name__ == "__main__":
-    # Create some expressions
     d0 = Dim(0)
     d1 = Dim(1)
-    s0 = Symbol(0)
     c5 = Constant(5)
 
     expr1 = d0 + d1
     print(f"d0 + d1 = {expr1}")
-
-    expr2 = d0 * 2 + s0
-    print(f"d0 * 2 + s0 = {expr2}")
 
     expr3 = (d0 + 4).floor_div(2)
     print(f"(d0 + 4) floordiv 2 = {expr3}")
 
     expr4 = d0 % 8
     print(f"d0 mod 8 = {expr4}")
-
-    print(f"d0 + s0 is_symbolic_or_constant: {(d0 + s0).is_symbolic_or_constant()}")
-    print(f"s0 + 5 is_symbolic_or_constant: {(s0 + 5).is_symbolic_or_constant()}")
-    print(f"d0 * 2 is_pure_affine: {(d0 * 2).is_pure_affine()}")
-    print(f"d0 * s0 is_pure_affine: {(d0 * s0).is_pure_affine()}")

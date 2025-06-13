@@ -1,11 +1,9 @@
 import pytest
 from quasiaffine import (
     Dim,
-    Symbol,
     Constant,
     AffineExprKind,
     bind_dims,
-    bind_symbols,
     get_constants,
 )
 
@@ -17,12 +15,6 @@ class TestAffineExprBasics:
         assert d0.get_kind() == AffineExprKind.DIM_ID
         assert d0.get_position() == 0
         assert str(d0) == "d0"
-
-    def test_symbol_expr_creation(self):
-        s1 = Symbol(1)
-        assert s1.get_kind() == AffineExprKind.SYMBOL_ID
-        assert s1.get_position() == 1
-        assert str(s1) == "s1"
 
     def test_constant_expr_creation(self):
         c42 = Constant(42)
@@ -201,38 +193,27 @@ class TestSimplification:
 
 class TestProperties:
 
-    def test_is_symbolic_or_constant(self):
+    def test_is_constant(self):
         d0 = Dim(0)
-        s0 = Symbol(0)
         c5 = Constant(5)
-
-        assert not d0.is_symbolic_or_constant()
-        assert s0.is_symbolic_or_constant()
-        assert c5.is_symbolic_or_constant()
-
-        # s0 + 5 should be symbolic/constant
-        assert (s0 + 5).is_symbolic_or_constant()
-
-        # d0 + s0 should not be (contains dimension)
-        assert not (d0 + s0).is_symbolic_or_constant()
+        assert not d0.is_constant()
+        assert c5.is_constant()
 
     def test_is_pure_affine(self):
         d0 = Dim(0)
-        s0 = Symbol(0)
 
         # Basic expressions are pure affine
         assert d0.is_pure_affine()
-        assert s0.is_pure_affine()
         assert Constant(5).is_pure_affine()
 
         # Addition is pure affine
-        assert (d0 + s0).is_pure_affine()
+        assert (d0 + d0).is_pure_affine()
 
         # Multiplication with constant is pure affine
         assert (d0 * 3).is_pure_affine()
 
         # Multiplication without constant is not pure affine
-        assert not (d0 * s0).is_pure_affine()
+        assert not (d0 * d0).is_pure_affine()
 
         # Division by constant is pure affine
         assert (d0.floor_div(2)).is_pure_affine()
@@ -240,7 +221,7 @@ class TestProperties:
     def test_get_largest_known_divisor(self):
         d0 = Dim(0)
 
-        # Dimensions and symbols have divisor 1
+        # Dimensions have divisor 1
         assert d0.get_largest_known_divisor() == 1
 
         # get_constants have their absolute value as divisor
@@ -267,32 +248,15 @@ class TestProperties:
     def test_is_function_of_dim(self):
         d0 = Dim(0)
         d1 = Dim(1)
-        s0 = Symbol(0)
 
         assert d0.is_function_of_dim(0)
         assert not d0.is_function_of_dim(1)
-        assert not s0.is_function_of_dim(0)
 
         # Binary expression
-        expr = d0 + d1 + s0
+        expr = d0 + d1
         assert expr.is_function_of_dim(0)
         assert expr.is_function_of_dim(1)
         assert not expr.is_function_of_dim(2)
-
-    def test_is_function_of_symbol(self):
-        d0 = Dim(0)
-        s0 = Symbol(0)
-        s1 = Symbol(1)
-
-        assert s0.is_function_of_symbol(0)
-        assert not s0.is_function_of_symbol(1)
-        assert not d0.is_function_of_symbol(0)
-
-        # Binary expression
-        expr = d0 + s0 * s1
-        assert expr.is_function_of_symbol(0)
-        assert expr.is_function_of_symbol(1)
-        assert not expr.is_function_of_symbol(2)
 
 
 class TestReplacement:
@@ -300,42 +264,14 @@ class TestReplacement:
     def test_replace_dims(self):
         d0 = Dim(0)
         d1 = Dim(1)
-        s0 = Symbol(0)
 
         expr = d0 + d1 * 2
-
-        # Replace d0 with s0, d1 with constant 5
-        new_expr = expr.replace_dims([s0, Constant(5)])
-
-        # Should become s0 + 5 * 2 = s0 + 10
-        expected = s0 + 10
+        new_expr = expr.replace_dims([d0, Constant(5)])
+        expected = d0 + 10
         assert str(new_expr) == str(expected)
 
-    def test_replace_symbols(self):
-        d0 = Dim(0)
-        s0 = Symbol(0)
-
-        expr = d0 + s0 * 3
-
-        # Replace s0 with constant 4
-        new_expr = expr.replace_symbols([Constant(4)])
-
-        # Should become d0 + 4 * 3 = d0 + 12
-        expected = d0 + 12
-        assert str(new_expr) == str(expected)
-
-    def test_replace_with_map(self):
-        d0 = Dim(0)
-        s0 = Symbol(0)
-
-        expr = d0 + s0
-
-        # Replace d0 with s0 using map
-        expr_map = {d0: s0}
-        new_expr = expr.replace(expr_map)
-
-        # Should become s0 + s0
-        expected = s0 + s0
+        new_expr = expr.replace({d0: Constant(5)})
+        expected = 5 + d1 * 2
         assert str(new_expr) == str(expected)
 
 
@@ -350,14 +286,6 @@ class TestUtilityFunctions:
         assert dims[1].get_position() == 1
         assert dims[2].get_position() == 2
 
-    def test_bind_symbols(self):
-        symbols = bind_symbols("x", "y")
-
-        assert len(symbols) == 2
-        assert all(isinstance(s, Symbol) for s in symbols)
-        assert symbols[0].get_position() == 0
-        assert symbols[1].get_position() == 1
-
     def test_get_constants(self):
         constants = get_constants([1, 2, 3])
 
@@ -371,11 +299,10 @@ class TestUtilityFunctions:
 class TestComplexExpressions:
 
     def test_mixed_expression(self):
-        # Build: 2*d0 + 3*d1 + s0 - 5
+        # Build: 2*d0 + 3*d1 - 5
         d0, d1 = bind_dims("i", "j")
-        s0 = Symbol(0)
 
-        expr = 2 * d0 + 3 * d1 + s0 - 5
+        expr = 2 * d0 + 3 * d1 - 5
 
         # Should be pure affine
         assert expr.is_pure_affine()
@@ -383,7 +310,6 @@ class TestComplexExpressions:
         # Should be function of both dimensions
         assert expr.is_function_of_dim(0)
         assert expr.is_function_of_dim(1)
-        assert expr.is_function_of_symbol(0)
 
     def test_division_expression(self):
         d0 = Dim(0)
