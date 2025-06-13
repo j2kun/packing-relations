@@ -1,5 +1,13 @@
 import pytest
-from quasiaffine import *
+from quasiaffine import (
+    Dim,
+    Symbol,
+    Constant,
+    AffineExprKind,
+    bind_dims,
+    bind_symbols,
+    get_constants,
+)
 
 
 class TestAffineExprBasics:

@@ -391,8 +391,10 @@ def _simplify_add(lhs: AffineExpr, rhs: AffineExpr) -> Optional[AffineExpr]:
         return Constant(lhs.get_value() + rhs.get_value())
 
     # Canonicalize: constant on right (4 + d0 becomes d0 + 4)
-    if isinstance(lhs, Constant) and not isinstance(rhs, Constant):
-        return rhs + lhs
+    if lhs.is_symbolic_or_constant() and not rhs.is_symbolic_or_constant():
+        return _simplify_add(rhs, lhs) or AffineBinaryOpExpr(
+            AffineExprKind.ADD, rhs, lhs
+        )
 
     # Addition with zero
     if isinstance(rhs, Constant) and rhs.get_value() == 0:
@@ -411,8 +413,10 @@ def _simplify_mul(lhs: AffineExpr, rhs: AffineExpr) -> Optional[AffineExpr]:
         return Constant(lhs.get_value() * rhs.get_value())
 
     # Canonicalize: symbolic/constant on right
-    if not rhs.is_symbolic_or_constant() or isinstance(lhs, Constant):
-        return rhs * lhs
+    if lhs.is_symbolic_or_constant() and not rhs.is_symbolic_or_constant():
+        return _simplify_mul(rhs, lhs) or AffineBinaryOpExpr(
+            AffineExprKind.Mul, rhs, lhs
+        )
 
     if isinstance(rhs, Constant):
         if rhs.get_value() == 1:
