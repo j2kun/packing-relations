@@ -6,7 +6,6 @@ from quasiaffine import (
     AffineExprKind,
     Constant,
     Dim,
-    Symbol,
     bind_dims,
     get_affine_binary_op_expr,
 )
@@ -50,7 +49,7 @@ class IntegerRelation:
     f(d₀, d₁, ..., c₀, c₁, ..., l₀, l₁, ..., s₀, s₁, ...) = 0
 
     where d_i are domain variables, c_i are codomain variables,
-    l_i are local/existential variables, and s_i are symbolic parameters.
+    l_i are local/existential variables
     """
 
     def __init__(
@@ -58,7 +57,6 @@ class IntegerRelation:
         domain: IndexSpace,
         codomain: IndexSpace,
         constraints: List[AffineExpr],
-        num_symbols: int = 0,
         num_locals: int = 0,
         local_bounds: Optional[List[int]] = None,
     ):
@@ -69,14 +67,12 @@ class IntegerRelation:
             domain: The domain index space
             codomain: The codomain index space
             constraints: List of quasiaffine expressions interpreted as f(...) = 0
-            num_symbols: Number of symbolic parameters
             num_locals: Number of local/existential variables
             local_bounds: Upper bounds for each local variable (0 to bound-1)
         """
         self.domain = domain
         self.codomain = codomain
         self.constraints = constraints
-        self.num_symbols = num_symbols
         self.num_locals = num_locals
         self.local_bounds = local_bounds or []
 
@@ -115,7 +111,6 @@ class IntegerRelation:
         domain_values: Tuple[int, ...],
         codomain_values: Tuple[int, ...],
         local_values: Tuple[int, ...] = (),
-        symbol_values: Optional[Tuple[int, ...]] = None,
     ) -> int:
         """
         Evaluate a constraint expression with given variable values.
@@ -124,11 +119,7 @@ class IntegerRelation:
         - d₀, d₁, ... d_{domain.num_dims-1} - domain dims
         - d_{domain.num_dims}, ..., d_{domain.num_dims + codomain.num_dims - 1} - codomain dims
         - d_{domain.num_dims + codomain.num_dims}, ... - local dims
-        - s₀, s₁, ... - symbols
         """
-        if symbol_values is None:
-            symbol_values = tuple(0 for _ in range(self.num_symbols))
-
         # Create substitution map
         substitutions = {}
 
@@ -146,10 +137,6 @@ class IntegerRelation:
                 Constant(val)
             )
 
-        # Symbols
-        for i, val in enumerate(symbol_values):
-            substitutions[Symbol(i)] = Constant(val)
-
         return self._eval_expr_with_substitutions(constraint, substitutions)
 
     def _eval_expr_with_substitutions(
@@ -158,7 +145,7 @@ class IntegerRelation:
         """Recursively evaluate expression with variable substitutions"""
         if isinstance(expr, Constant):
             return expr.get_value()
-        elif isinstance(expr, (Dim, Symbol)):
+        elif isinstance(expr, Dim):
             if expr in substitutions:
                 return substitutions[expr].get_value()
             else:
@@ -197,7 +184,6 @@ class IntegerRelation:
         domain_tuple: Tuple[int, ...],
         codomain_tuple: Tuple[int, ...],
         local_values: Tuple[int, ...],
-        symbol_values: Optional[Tuple[int, ...]] = None,
     ) -> bool:
         """Check if all constraints are satisfied for given variable assignments"""
         for constraint in self.constraints:
@@ -207,7 +193,6 @@ class IntegerRelation:
                     domain_tuple,
                     codomain_tuple,
                     local_values,
-                    symbol_values,
                 )
                 != 0
             ):
@@ -218,7 +203,6 @@ class IntegerRelation:
         self,
         domain_tuple: Tuple[int, ...],
         codomain_tuple: Tuple[int, ...],
-        symbol_values: Optional[Tuple[int, ...]] = None,
     ) -> bool:
         """
         Check if a (domain, codomain) pair satisfies constraints.
@@ -244,21 +228,19 @@ class IntegerRelation:
         # Existential quantification: check if ANY assignment to local vars satisfies constraints
         for local_values in self._enumerate_local_values():
             if self._all_constraints_satisfied(
-                domain_tuple, codomain_tuple, local_values, symbol_values
+                domain_tuple, codomain_tuple, local_values
             ):
                 return True
 
         return False
 
-    def enumerate_relation(
-        self, symbol_values: Optional[Tuple[int, ...]] = None
-    ) -> Iterator[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
+    def enumerate_relation(self) -> Iterator[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
         """
         Generator that yields all (domain_tuple, codomain_tuple) pairs in the relation.
         """
         for domain_tuple in self.domain:
             for codomain_tuple in self.codomain:
-                if self.is_in_relation(domain_tuple, codomain_tuple, symbol_values):
+                if self.is_in_relation(domain_tuple, codomain_tuple):
                     yield (domain_tuple, codomain_tuple)
 
     def compose(self, other: "IntegerRelation") -> "IntegerRelation":
@@ -331,7 +313,6 @@ class IntegerRelation:
             result_domain,
             result_codomain,
             result_constraints,
-            num_symbols=max(self.num_symbols, other.num_symbols),
             num_locals=result_num_locals,
             local_bounds=result_local_bounds,
         )
@@ -346,7 +327,7 @@ class IntegerRelation:
         intermediate_size: int,
     ) -> AffineExpr:
         """Remap constraint dimensions for composition"""
-        if isinstance(constraint, Constant) or isinstance(constraint, Symbol):
+        if isinstance(constraint, Constant):
             return constraint
         elif isinstance(constraint, Dim):
             pos = constraint.get_position()
@@ -394,23 +375,20 @@ class IntegerRelation:
         else:
             raise ValueError(f"Unknown constraint type: {type(constraint)}")
 
-    def to_set(
-        self, symbol_values: Optional[Tuple[int, ...]] = None
-    ) -> List[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
+    def to_set(self) -> List[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
         """Convert the relation to a list of all valid (domain, codomain) pairs."""
-        return list(self.enumerate_relation(symbol_values))
+        return list(self.enumerate_relation())
 
-    def is_empty(self, symbol_values: Optional[Tuple[int, ...]] = None) -> bool:
-        """Check if the relation is empty for given symbol values."""
+    def is_empty(self) -> bool:
         try:
-            next(self.enumerate_relation(symbol_values))
+            next(self.enumerate_relation())
             return False
         except StopIteration:
             return True
 
-    def size(self, symbol_values: Optional[Tuple[int, ...]] = None) -> int:
+    def size(self) -> int:
         """Count the number of tuples in the relation."""
-        return sum(1 for _ in self.enumerate_relation(symbol_values))
+        return sum(1 for _ in self.enumerate_relation())
 
     def __str__(self) -> str:
         """String representation of the relation."""
@@ -420,7 +398,7 @@ class IntegerRelation:
         if not constraints_str:
             constraints_str = "true"
 
-        locals_str = f", {self.num_locals} locals" if self.num_locals > 0 else ""
+        locals_str = f", (locals {self.local_bounds})" if self.num_locals > 0 else ""
         return f"{{(d, c) ∈ {self.domain} × {self.codomain}{locals_str} | {constraints_str}}}"
 
     def __repr__(self) -> str:
@@ -485,7 +463,6 @@ if __name__ == "__main__":
     # Example constraint: d0 + d1 = d2 (sum of domain coords equals first codomain coord)
     # and d3 = 0 (second codomain coord is always 0)
     constraints = [d0 + d1 - d2, d3]  # d0 + d1 - d2 = 0  # d3 = 0
-
     relation = IntegerRelation(domain, codomain, constraints)
 
     print("Relation:", relation)
@@ -503,93 +480,50 @@ if __name__ == "__main__":
     for domain_tuple, codomain_tuple in identity.enumerate_relation():
         print(f"  {domain_tuple} → {codomain_tuple}")
 
+    # 1D Composition example
+    A = IndexSpace(
+        [
+            4,
+        ]
+    )
+    B = IndexSpace(
+        [
+            4,
+        ]
+    )
+    C = IndexSpace(
+        [
+            4,
+        ]
+    )
+    a, b = bind_dims("a", "b")
+    b1, c = bind_dims("b1", "c")
 
-    print("=== Matrix Multiplication via Relation Composition ===\n")
+    r1_constraints = [
+        2 * a + b - 4,
+    ]
+    r2_constraints = [
+        b1 + c - 3,
+    ]
+    r1 = IntegerRelation(A, B, r1_constraints)
+    r2 = IntegerRelation(B, C, r2_constraints)
 
-    # Example: 2x2 matrices A and B, computing C = A * B
-    # A is 2x2, B is 2x2, so we have dimensions:
-    # - Matrix A: rows 0,1 and cols 0,1
-    # - Matrix B: rows 0,1 and cols 0,1
-    # - Matrix C: rows 0,1 and cols 0,1
+    print("\n\n")
+    print("R1:")
+    print(r1)
+    for domain_tuple, codomain_tuple in r1.enumerate_relation():
+        print(f"  {domain_tuple} → {codomain_tuple}")
+    print("size: " + str(r1.size()))
+    print("R2:")
+    print(r2)
+    for domain_tuple, codomain_tuple in r2.enumerate_relation():
+        print(f"  {domain_tuple} → {codomain_tuple}")
+    print("size: " + str(r2.size()))
 
-    # Create relations representing non-zero sparsity patterns
+    composed = r2.compose(r1)
+    print("\nComposed relation:")
+    print(composed)
+    print("size: " + str(composed.size()))
 
-    # R1: relates (i,k) pairs where A[i,k] != 0
-    # For demo, let's say A = [[1, 2], [0, 3]] (non-zeros at (0,0), (0,1), (1,1))
-    matrix_dim = IndexSpace([2, 2])  # 2x2 matrix indices
-
-    print("Matrix A sparsity pattern (non-zero entries):")
-    print("A = [[1, 2],")
-    print("     [0, 3]]")
-    print("Non-zero at: (0,0), (0,1), (1,1)\n")
-
-    # R1 constraints: enumerate specific non-zero positions
-    # We'll use a constraint that's satisfied only for the non-zero positions
-    i, k = bind_dims("i", "k")  # i=d0 (row), k=d1 (col)
-
-    # Constraint: (i-0)*(k-0) + (i-0)*(k-1) + (i-1)*(k-1) = 0
-    # This is satisfied when (i,k) ∈ {(0,0), (0,1), (1,1)}
-    # Simplified: i*k + i*(k-1) + (i-1)*(k-1) = 0
-    # = i*k + i*k - i + i*k - k - k + 1 = 3*i*k - i - 2*k + 1 = 0
-    # Actually, let's use a simpler approach with multiple constraints combined
-
-    # Better approach: use constraint that's 0 iff (i,k) is in our set
-    # (i-0)*(k-0) * (i-0)*(k-1) * (i-1)*(k-1) = 0
-    # But this is non-linear. Instead, use linear constraint that captures the pattern:
-
-    # For A sparsity, we'll use: constraint is 0 when (i,k) ∈ {(0,0), (0,1), (1,1)}
-    # One way: enumerate with multiple relations and take union, but let's use a trick:
-    # Use constraint: (2*i + k) % 3 - (i + k) % 2 = 0
-    # This won't work generically, so let's be more direct:
-
-    # Direct approach: A_constraint = (i + k - 1) * (i - k) * i * k = 0 has solutions including our points
-    # Even simpler: let's manually verify our points work with a specific constraint
-    A_constraint = (i + k - 1) * (2*i - k)  # = 0 when (i,k) ∈ {(0,0), (1,1), (0,1)}
-
-    R1 = IntegerRelation(matrix_dim, matrix_dim, [A_constraint])
-
-    print("R1 (A sparsity relation) - (i,k) pairs where A[i,k] ≠ 0:")
-    for domain_tuple, codomain_tuple in R1.enumerate_relation():
-        print(f"  A[{domain_tuple[0]},{domain_tuple[1]}] -> referenced at ({codomain_tuple[0]},{codomain_tuple[1]})")
-    print()
-
-    # R2: relates (k,j) pairs where B[k,j] != 0
-    # For demo, let's say B = [[1, 0], [2, 1]] (non-zeros at (0,0), (1,0), (1,1))
-    print("Matrix B sparsity pattern (non-zero entries):")
-    print("B = [[1, 0],")
-    print("     [2, 1]]")
-    print("Non-zero at: (0,0), (1,0), (1,1)\n")
-
-    k2, j = bind_dims("k", "j")  # k=d0 (row), j=d1 (col)
-    B_constraint = k2 * (j - 1) + (k2 - 1) * j  # = 0 when (k,j) ∈ {(0,0), (1,0), (1,1)}
-
-    R2 = IntegerRelation(matrix_dim, matrix_dim, [B_constraint])
-
-    print("R2 (B sparsity relation) - (k,j) pairs where B[k,j] ≠ 0:")
-    for domain_tuple, codomain_tuple in R2.enumerate_relation():
-        print(f"  B[{domain_tuple[0]},{domain_tuple[1]}] -> referenced at ({codomain_tuple[0]},{codomain_tuple[1]})")
-    print()
-
-    # Compose R1 and R2: R1 ∘ R2 gives (i,j) pairs where ∃k: A[i,k] ≠ 0 ∧ B[k,j] ≠ 0
-    print("Composing relations: R1 ∘ R2")
-    print("This gives (i,j) pairs where ∃k such that A[i,k] ≠ 0 AND B[k,j] ≠ 0")
-    print("(i.e., positions in C = A*B that could be non-zero)\n")
-
-    R_composed = R1.compose(R2)
-
-    print("Result of composition - potential non-zero positions in C = A*B:")
-    result_pairs = list(R_composed.enumerate_relation())
-    for domain_tuple, codomain_tuple in result_pairs:
-        print(f"  C[{domain_tuple[0]},{domain_tuple[1]}] could be non-zero")
-
-    print(f"\nTotal potential non-zero positions: {len(result_pairs)} out of {matrix_dim.size()} total positions")
-
-    # Verify by manual calculation:
-    print("\nManual verification:")
-    print("C[0,0] = A[0,0]*B[0,0] + A[0,1]*B[1,0] = 1*1 + 2*2 = 5 ≠ 0 ✓")
-    print("C[0,1] = A[0,0]*B[0,1] + A[0,1]*B[1,1] = 1*0 + 2*1 = 2 ≠ 0 ✓")
-    print("C[1,0] = A[1,0]*B[0,0] + A[1,1]*B[1,0] = 0*1 + 3*2 = 6 ≠ 0 ✓")
-    print("C[1,1] = A[1,0]*B[0,1] + A[1,1]*B[1,1] = 0*0 + 3*1 = 3 ≠ 0 ✓")
-    print("\nActual C = [[5, 2],")
-    print("           [6, 3]]")
-    print("All positions are non-zero, matching our composition result!")
+    for domain_tuple, codomain_tuple in composed.enumerate_relation():
+        print(f"  {domain_tuple} → {codomain_tuple}")
