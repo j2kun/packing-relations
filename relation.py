@@ -228,6 +228,10 @@ class IntegerRelation:
             new_locals_domain,
         )
 
+    def to_set(self) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
+        """Convert the relation to a list of all valid (domain, codomain) pairs."""
+        return set(self.enumerate_relation())
+
     def size(self) -> int:
         """Count the number of tuples in the relation."""
         return sum(1 for _ in self.enumerate_relation())
@@ -276,14 +280,8 @@ if __name__ == "__main__":
     B1 = IndexSpace([4], [b1])
     C = IndexSpace([4], [c])
 
-    r1_constraints = [
-        2 * a + b - 4,
-    ]
-    r2_constraints = [
-        b1 + c - 3,
-    ]
-    r1 = IntegerRelation(A, B, r1_constraints)
-    r2 = IntegerRelation(B1, C, r2_constraints)
+    r1 = IntegerRelation(A, B, [2 * a + b - 4])
+    r2 = IntegerRelation(B1, C, [b1 + c - 3])
 
     print("\n\n")
     print("R1:")
