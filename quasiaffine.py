@@ -233,8 +233,21 @@ class Binary(AffineExpr):
             AffineExprKind.CEIL_DIV: " ceildiv ",
             AffineExprKind.MOD: " mod ",
         }
-        return f"({self.lhs}{op_str[self.kind()]}{self.rhs})"
+        result = ""
+        match self.lhs:
+            case Binary():
+                result += f"({self.lhs})"
+            case _:
+                result += f"{self.lhs}"
 
+        result += f"{op_str[self.kind()]}"
+        match self.rhs:
+            case Binary():
+                result += f"({self.rhs})"
+            case _:
+                result += f"{self.rhs}"
+
+        return result
 
 class Add(Binary):
     def kind(self) -> AffineExprKind:

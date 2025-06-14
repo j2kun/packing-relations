@@ -228,6 +228,14 @@ class IntegerRelation:
             new_locals_domain,
         )
 
+    def inverse(self) -> "IntegerRelation":
+        return IntegerRelation(
+            domain=self.codomain,
+            codomain=self.domain,
+            constraints=self.constraints,
+            locals=self.locals,
+        )
+
     def to_set(self) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
         """Convert the relation to a list of all valid (domain, codomain) pairs."""
         return set(self.enumerate_relation())
@@ -239,7 +247,7 @@ class IntegerRelation:
     def __str__(self) -> str:
         """String representation of the relation."""
         constraints_str = " ∧ ".join(
-            [f"({constraint}) = 0" for constraint in self.constraints]
+            [f"{constraint} = 0" for constraint in self.constraints]
         )
         if not constraints_str:
             constraints_str = "true"
