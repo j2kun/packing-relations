@@ -228,17 +228,6 @@ class IntegerRelation:
             new_locals_domain,
         )
 
-    def to_set(self) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
-        """Convert the relation to a list of all valid (domain, codomain) pairs."""
-        return list(self.enumerate_relation())
-
-    def is_empty(self) -> bool:
-        try:
-            next(self.enumerate_relation())
-            return False
-        except StopIteration:
-            return True
-
     def size(self) -> int:
         """Count the number of tuples in the relation."""
         return sum(1 for _ in self.enumerate_relation())
