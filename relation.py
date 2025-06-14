@@ -10,7 +10,7 @@ from quasiaffine import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class IndexSpace:
     dim_sizes: list[int]
     dims: list[Dim]
