@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, List, Optional, TypeVar, Callable
+from typing import Optional, TypeVar, Callable
 
 
 T = TypeVar("T")
@@ -62,7 +62,7 @@ class AffineExpr(ABC):
 
         return self.reduce(reducer, True)
 
-    def replace_dims(self, dim_replacements: Dict["Dim", "AffineExpr"]) -> "AffineExpr":
+    def replace_dims(self, dim_replacements: dict["Dim", "AffineExpr"]) -> "AffineExpr":
         def reducer(expr, ts, accum):
             match expr:
                 case Constant():
@@ -75,6 +75,18 @@ class AffineExpr(ABC):
                     raise ValueError(f"Unknown expression type: {expr}")
 
         return self.reduce(reducer, True).simplify()
+
+    def is_function_of_dims(self, dims: set["Dim"]) -> "AffineExpr":
+        def reducer(expr, ts, accum):
+            match expr:
+                case Constant():
+                    return True
+                case Dim():
+                    return expr in dims
+                case _:
+                    return accum and all(ts)
+
+        return self.reduce(reducer, True)
 
     def simplify(self) -> "AffineExpr":
         def reducer(expr, ts, accum):
@@ -352,15 +364,15 @@ def _simplify_mod(lhs: AffineExpr, rhs: AffineExpr) -> Optional[AffineExpr]:
     return None
 
 
-def bind_dims(*names) -> List[Dim]:
+def bind_dims(*names) -> list[Dim]:
     return [NamedDim(name) for name in names]
 
 
-def bind_unique_dims(count) -> List[Dim]:
+def bind_unique_dims(count) -> list[Dim]:
     return [UniqueDim() for _ in range(count)]
 
 
-def get_constants(constants: List[int]) -> List[Constant]:
+def get_constants(constants: list[int]) -> list[Constant]:
     return [Constant(c) for c in constants]
 
 
