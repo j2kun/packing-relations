@@ -1,3 +1,5 @@
+"""A class representing an integer relation."""
+
 from typing import Iterator, Optional
 from dataclasses import dataclass
 import itertools
@@ -12,6 +14,10 @@ from quasiaffine import (
 
 @dataclass(frozen=True)
 class IndexSpace:
+    """
+    An index space defined by a set of dimension and their sizes. Equivalent to
+    the cross product of integer sets {0, ..., dim_sizes[i]-1} for each i.
+    """
     dim_sizes: list[int]
     dims: list[Dim]
 
@@ -43,13 +49,15 @@ class IndexSpace:
 
 class IntegerRelation:
     """
-    Represents a relation between tuples of integers defined by quasiaffine constraints.
+    Represents a relation between tuples of integers defined by quasiaffine
+    constraints.
 
     A relation R ⊆ Domain × Codomain is defined by constraints of the form:
     f(d₀, d₁, ..., c₀, c₁, ..., l₀, l₁, ...) = 0
 
-    where d_i are domain variables, c_i are codomain variables,
-    l_i are local/existential variables
+    where d_i are domain variables, c_i are codomain variables, l_i are
+    local/existential variables. Note that the local variables are created by
+    composing relations.
     """
 
     def __init__(
@@ -66,8 +74,7 @@ class IntegerRelation:
             domain: The domain index space
             codomain: The codomain index space
             constraints: List of quasiaffine expressions interpreted as f(...) = 0
-            num_locals: Number of local/existential variables
-            local_bounds: Upper bounds for each local variable (0 to bound-1)
+            locals: The local index space
         """
         self.domain = domain
         self.codomain = codomain

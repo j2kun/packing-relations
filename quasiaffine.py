@@ -1,4 +1,4 @@
-"A data structure mirroring AffineExpr in MLIR." ""
+"""A data structure mirroring AffineExpr in MLIR, with simplifications."""
 
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -31,6 +31,7 @@ class AffineExpr(ABC):
         return True
 
     def reduce(self, fn: Callable[["AffineExpr", list[T], T], T], accum: T) -> T:
+        """A general reduce function that can be called on an affine expr."""
         match self:
             case Constant() | Dim():
                 return fn(self, [], accum)
@@ -70,6 +71,9 @@ class AffineExpr(ABC):
                 case Dim():
                     return dim_replacements.get(expr, expr)
                 case Binary():
+                    # Subclasses of Binary get re-constructed with subtrees
+                    # processed by the recursive calls to the reducer, i.e.,
+                    # subtrees with dims replaced.
                     return type(expr)(*ts)
                 case _:
                     raise ValueError(f"Unknown expression type: {expr}")
@@ -162,6 +166,7 @@ class Dim(AffineExpr):
 
 
 class NamedDim(Dim):
+    """For legibility, we can name dimensions. Named dims are considered equal by name."""
     def __init__(self, name: str):
         self.name = name
 
@@ -176,6 +181,7 @@ class NamedDim(Dim):
 
 
 class UniqueDim(Dim):
+    """For machine-generated dimensions, give a unique numeric id."""
     # static id for all UniqueDims
     _id_counter = 0
 

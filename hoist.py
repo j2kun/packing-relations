@@ -42,10 +42,10 @@ def apply_layout(layout: Layout, data: np.ndarray) -> np.ndarray:
 
     # This is the key inefficiency in this method: iterating over the entire
     # relation requires iterating over the cross product of the domain and
-    # codomain. Better would be to either simplify the relation somehow using
-    # the validity condition above to ensure a useful representation can be
-    # found that requires iterating only over the index space of the codomain
-    # (e.g. one iteration per slot).
+    # codomain AND the space of local variables. Better would be to either
+    # simplify the relation somehow using the validity condition above to
+    # ensure a useful representation can be found that requires iterating only
+    # over the index space of the codomain (e.g. one iteration per slot).
     for data_index, slot_index in layout.enumerate_relation():
         ciphertexts[slot_index] = data[data_index]
 
