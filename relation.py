@@ -253,7 +253,7 @@ class IntegerRelation:
             constraints_str = "true"
 
         locals_str = f", (locals {self.locals})" if self.locals.num_dims else ""
-        return f"{{(d, c) ∈ {self.domain} × {self.codomain}{locals_str} | {constraints_str}}}"
+        return f"{{({self.domain.dims}, {self.codomain.dims}) ∈ {self.domain} × {self.codomain}{locals_str} | {constraints_str}}}"
 
     def __repr__(self) -> str:
         return (

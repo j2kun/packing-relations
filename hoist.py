@@ -1,6 +1,8 @@
 from quasiaffine import bind_dims, bind_unique_dims
 from relation import IndexSpace, IntegerRelation
 
+import numpy as np
+
 
 # A layout is an integer relation where the domain is the data index space and
 # the codomain is the ciphertext slot index space. A tuple (I1, I2) is in the
@@ -31,6 +33,23 @@ def is_valid_layout(layout: Layout) -> bool:
         )
 
     return True
+
+
+def apply_layout(layout: Layout, data: np.ndarray) -> np.ndarray:
+    """Convert a data array to an array of ciphertexts."""
+    # Initialize slots based on the codomain size
+    ciphertexts = np.zeros(layout.codomain.dim_sizes, dtype=data.dtype)
+
+    # This is the key inefficiency in this method: iterating over the entire
+    # relation requires iterating over the cross product of the domain and
+    # codomain. Better would be to either simplify the relation somehow using
+    # the validity condition above to ensure a useful representation can be
+    # found that requires iterating only over the index space of the codomain
+    # (e.g. one iteration per slot).
+    for data_index, slot_index in layout.enumerate_relation():
+        ciphertexts[slot_index] = data[data_index]
+
+    return ciphertexts
 
 
 def hoist_through_matvec(mat_layout: Layout, conversion: IntegerRelation):
@@ -87,44 +106,65 @@ def hoist_through_matvec(mat_layout: Layout, conversion: IntegerRelation):
 
 
 if __name__ == "__main__":
-    mat_dim = 4
+    mat_rows = 4
+    mat_cols = 4
     num_cts = 4
     num_slots = 8
+
+    # example data matrix
+    data = np.arange(mat_rows * mat_cols, dtype=np.int32).reshape((mat_rows, mat_cols))
+    print(f"Data matrix:\n{data}\n")
+
     # Halevi-Shoup diagonal matrix layout
     row, col, ct, slot = bind_dims("row", "col", "ct", "slot")
-    domain = IndexSpace([mat_dim, mat_dim], dims=[row, col])
-    # 32 ciphertexts each with 128 slots
-    codomain = IndexSpace([mat_dim, num_slots], dims=[ct, slot])
+    domain = IndexSpace([mat_rows, mat_cols], dims=[row, col])
+    codomain = IndexSpace([num_cts, num_slots], dims=[ct, slot])
 
-    constraints = [(slot % mat_dim) - row, (row + col) % mat_dim - ct]
+    constraints = [(slot % mat_rows) - row, (ct + slot) % mat_cols - col]
     diagonal_matrix_layout = Layout(
         domain=domain, codomain=codomain, constraints=constraints
     )
 
-    print(diagonal_matrix_layout)
-    # print("Is valid?", is_valid_layout(diagonal_matrix_layout))
+    print(f"Diagonal matrix layout: {diagonal_matrix_layout}")
+    print(f"Is valid? {is_valid_layout(diagonal_matrix_layout)}")
+    print("Enumerated:")
+    all_pts = list(diagonal_matrix_layout.enumerate_relation())
+    all_pts.sort()
+    for pt in all_pts:
+        print(pt)
+    ciphertexts = apply_layout(diagonal_matrix_layout, data)
+    print(f"\nApplied to test data:\n{ciphertexts}\n")
 
     # Vector layout and post-matvec conversion
     v, w, x = bind_dims("v", "w", "x")
-    vec_domain1 = IndexSpace([mat_dim], dims=[v])
-    vec_domain2 = IndexSpace([mat_dim], dims=[w])
+    vec_domain1 = IndexSpace([mat_cols], dims=[v])
+    vec_domain2 = IndexSpace([mat_cols], dims=[w])
     ciphertext_domain = IndexSpace([num_slots], dims=[x])
-    vec_layout1 = Layout(vec_domain1, ciphertext_domain, [(x % num_slots) - v])
-    vec_layout2 = Layout(vec_domain2, ciphertext_domain, [((x + 2) % mat_dim) - w])
+    # Convert from a standard cyclic layout of a vector, to a cyclic layout
+    # that is rotated by 1.
+    vec_layout1 = Layout(vec_domain1, ciphertext_domain, [(x % mat_cols) - v])
+    vec_layout2 = Layout(vec_domain2, ciphertext_domain, [((x + 1) % mat_cols) - w])
+
+    print(f"Vector layout 1 applied: {apply_layout(vec_layout1, np.arange(mat_cols))}")
+    print(f"Vector layout 2 applied: {apply_layout(vec_layout2, np.arange(mat_cols))}")
 
     # Hoist the layout conversion up through the matvec mul, by analyzing the
     # composition of the converted layouts to get the transformation required
-    # on axis 1 of the matrix.
+    # on axis 1 of the matrix. The inverse step here is key to make sure the
+    # rotation goes in the right direction.
     convert_1_to_2 = vec_layout2.inverse().compose(vec_layout1)
 
-    # It should only make sense to hoist if the conversion is a permutation.
-    # print("conversion is valid?", is_valid_layout(convert_1_to_2))
-
     hoisted = hoist_through_matvec(diagonal_matrix_layout, convert_1_to_2)
-    print(f"hoisted: {hoisted}")
+    print(f"Hoisted through {convert_1_to_2}")
+    print(f"Hoisted: {hoisted}")
+    print(f"Is valid? {is_valid_layout(hoisted)}")
+    print("Enumerated:")
 
     all_pts = list(hoisted.enumerate_relation())
     all_pts.sort()
 
     for pt in all_pts:
         print(pt)
+
+    ciphertexts = apply_layout(hoisted, data)
+    print(f"\nApplied to test data:\n{ciphertexts}\n")

@@ -153,7 +153,7 @@ class AffineExpr(ABC):
         return _simplify_mod(self, other) or Mod(self, other)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self})"
+        return str(self)
 
 
 class Dim(AffineExpr):
