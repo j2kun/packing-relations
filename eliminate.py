@@ -20,7 +20,11 @@ def scaleCol(A, i, c):
 
 
 def scaleRow(A, i, c):
-    A[i, :] = np.array(A[i, :], dtype=numpy.float64) * c * numpy.ones(A.shape[1], dtype=numpy.float64)
+    A[i, :] = (
+        np.array(A[i, :], dtype=numpy.float64)
+        * c
+        * numpy.ones(A.shape[1], dtype=numpy.float64)
+    )
 
 
 def colCombine(A, addTo, scaleCol, scaleAmt):
@@ -35,27 +39,30 @@ if __name__ == "__main__":
     # row, col, ct, slot, d0, d1, c1, c2, c3, c4
 
     c = numpy.array([1] * 10)
-    A = numpy.array([
-        # slot % 4 - row = 0
-        # i.e.
-        # slot + 4 c1 - 4 nc1 - row = 0
-        [-1, 0, 0, 1, 0, 0, 4, 0, 0, 0],
-        # (ct + slot) % 4 - d1 = 0
-        # i.e.
-        # ct + slot + 4 c2 - 4nc2 - d1 = 0
-        [0, 0, 1, 1, 0, -1, 0, 4, 0, 0],
-        # d0 % 4 - d1 = 0
-        # i.e.
-        # d0 + 4 c3 - 4 nc3 - d1 = 0
-        [0, 0, 0, 0, 1, -1, 0, 0, 4, 0],
-        # (d0 + 1) % 4 - col = 0
-        # i.e.
-        # d0 + 4 c4 - 4 nc4 - col = -1
-        [0, -1, 0, 0, 1, 0, 0, 0, 0, 4],
-    ])
+    A = numpy.array(
+        [
+            # slot % 4 - row = 0
+            # i.e.
+            # slot + 4 c1 - 4 nc1 - row = 0
+            [-1, 0, 0, 1, 0, 0, 4, 0, 0, 0],
+            # (ct + slot) % 4 - d1 = 0
+            # i.e.
+            # ct + slot + 4 c2 - 4nc2 - d1 = 0
+            [0, 0, 1, 1, 0, -1, 0, 4, 0, 0],
+            # d0 % 4 - d1 = 0
+            # i.e.
+            # d0 + 4 c3 - 4 nc3 - d1 = 0
+            [0, 0, 0, 0, 1, -1, 0, 0, 4, 0],
+            # (d0 + 1) % 4 - col = 0
+            # i.e.
+            # d0 + 4 c4 - 4 nc4 - col = -1
+            [0, -1, 0, 0, 1, 0, 0, 0, 0, 4],
+        ]
+    )
     b = numpy.array([[0], [0], [0], [-1]])
 
     tableau = numpy.column_stack([A, b])
+    print(f"Input tableau:\n{tableau}")
 
     rowSwap(tableau, 1, 3)
     rowSwap(tableau, 2, 3)
@@ -69,7 +76,7 @@ if __name__ == "__main__":
 
     rowCombine(tableau, 1, 3, 1)
 
-    print(f"{tableau}")
+    print(f"\nReduced tableau:\n{tableau}")
 
     # reading off the tableau (manually) we get
     """
@@ -123,4 +130,3 @@ if __name__ == "__main__":
         result[ct, slot] = data[row, col]
 
     print(result)
-
