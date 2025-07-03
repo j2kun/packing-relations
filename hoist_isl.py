@@ -21,6 +21,27 @@ def evaluate_codomain(map, codomain_values):
     return map.apply_range(eval_map.reverse())
 
 
+def apply_to_domain_dimension(original_map, transform_relation, dim_index):
+    """
+    Apply a transformation relation to a specific dimension of a map's domain.
+    """
+    domain_space = original_map.domain().get_space()
+    n_dims = domain_space.dim(isl.dim_type.set)
+
+    identity_maps = []
+    for i in range(n_dims):
+        if i == dim_index:
+            identity_maps.append(transform_relation)
+        else:
+            identity_maps.append(isl.Map.identity(isl.Space.alloc(original_map.get_ctx(), 0, 1, 1)))
+
+    domain_transform = identity_maps[0]
+    for i in range(1, n_dims):
+        domain_transform = domain_transform.product(identity_maps[i])
+
+    return original_map.apply_domain(domain_transform)
+
+
 if __name__ == "__main__":
     mat_rows = 4
     mat_cols = 4
@@ -43,11 +64,11 @@ if __name__ == "__main__":
     diagonal_matrix_layout = isl.Map(layout_map_str, ctx)
     print(diagonal_matrix_layout)
 
-    print(f"Enumerating: ")
+    print("Enumerating: ")
     for point in enumerate(diagonal_matrix_layout.range().to_union_set()):
         print(point)
 
-    print(f"Evaluating at row=1, col=2: ")
+    print("Evaluating at row=1, col=2: ")
     values = {"row": 1, "col": 2}
     sub_map = evaluate_domain(diagonal_matrix_layout, values)
     print(f"sub map is {sub_map}")
@@ -55,7 +76,7 @@ if __name__ == "__main__":
     for point in enumerate(sub_map.domain().to_union_set()):
         print(point)
 
-    print(f"Evaluating at ct=0, slot=1: ")
+    print("Evaluating at ct=0, slot=1: ")
     values = {"ct": 0, "slot": 1}
     sub_map = evaluate_codomain(diagonal_matrix_layout, values)
     print(f"sub map is {sub_map}")
@@ -86,11 +107,15 @@ if __name__ == "__main__":
     print(vec_layout2)
 
     print("vec conversion layout")
-    convert_1_to_2 = vec_layout2.reverse().apply_range(vec_layout1)
+    # both are v -> slot, and we want v->v
+    convert_1_to_2 = vec_layout2.apply_range(vec_layout1.reverse())
     print(convert_1_to_2)
 
     # sub_map = evaluate_domain(convert_1_to_2, {"slot": 1})
     # for point in enumerate(sub_map.domain().to_union_set()):
     #    print(point)
 
-    # FIXME: apply hoisting logic
+    hoisted = apply_to_domain_dimension(diagonal_matrix_layout, convert_1_to_2, 1)
+
+    print("Hoisted layout:")
+    print(hoisted)

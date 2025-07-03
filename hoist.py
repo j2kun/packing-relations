@@ -80,11 +80,11 @@ def hoist_through_matvec(mat_layout: Layout, conversion: IntegerRelation):
     )
 
     new_constraints = []
-    # Replace d1 with the new dimension in the existing constraints.
+    # Replace d1 with the new local dimension in the existing constraints.
     for constraint in mat_layout.constraints:
         new_constraints.append(constraint.replace_dims({mat_layout_dim: new_dim}))
 
-    # Make new constriants using the conversion relation and the existential
+    # Make new constraints using the conversion relation and the existential
     # quantifier.
     for constraint in conversion.constraints:
         # Conv(i, j) = 0 becomes Conv(new_local, d1) = 0
