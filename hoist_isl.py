@@ -1,9 +1,16 @@
 import islpy as isl
+import numpy as np
+
+
+def point_to_python(point):
+    # Alternatively, you have to iterate over the dims and use
+    # point.get_coordinate_val(isl.dim_type.set_, 0).to_python()
+    return eval(point.to_str().strip("{}"))
 
 
 def enumerate(set_):
     L = []
-    set_.foreach_point(lambda x: L.append(x))
+    set_.foreach_point(lambda x: L.append(point_to_python(x)))
     return L
 
 
@@ -21,25 +28,37 @@ def evaluate_codomain(map, codomain_values):
     return map.apply_range(eval_map.reverse())
 
 
+def apply_layout(map, data, ciphertexts_shape):
+    dims = ["ct", "slot"]
+    def pt_to_values(pt):
+        return dict(zip(dims, pt))
+
+    ciphertexts = np.zeros(ciphertexts_shape, dtype=data.dtype)
+    for codomain_pt in enumerate(map.range().to_union_set()):
+        sub_map = evaluate_codomain(map, pt_to_values(codomain_pt))
+        for domain_pt in enumerate(sub_map.domain().to_union_set()):
+            ciphertexts[*codomain_pt] = data[*domain_pt]
+
+    return ciphertexts
+
+
 def apply_to_domain_dimension(original_map, transform_relation, dim_index):
     """
     Apply a transformation relation to a specific dimension of a map's domain.
     """
-    domain_space = original_map.domain().get_space()
-    n_dims = domain_space.dim(isl.dim_type.set)
+    n_dims = original_map.dim(isl.dim_type.in_)
+    dims = [
+        isl.Aff.var_on_domain(original_map.domain().get_space(), isl.dim_type.set, i)
+        for i in range(n_dims)
+    ]
+    id_maps = [isl.Map.from_aff(dim) for dim in dims]
+    id_maps[dim_index] = id_maps[dim_index].apply_range(transform_relation)
 
-    identity_maps = []
-    for i in range(n_dims):
-        if i == dim_index:
-            identity_maps.append(transform_relation)
-        else:
-            identity_maps.append(isl.Map.identity(isl.Space.alloc(original_map.get_ctx(), 0, 1, 1)))
-
-    domain_transform = identity_maps[0]
+    product = id_maps[0]
     for i in range(1, n_dims):
-        domain_transform = domain_transform.product(identity_maps[i])
+        product = product.flat_range_product(id_maps[i])
 
-    return original_map.apply_domain(domain_transform)
+    return original_map.apply_domain(product.reverse())
 
 
 if __name__ == "__main__":
@@ -47,6 +66,9 @@ if __name__ == "__main__":
     mat_cols = 4
     num_cts = 4
     num_slots = 8
+
+    data = np.arange(mat_rows * mat_cols).reshape((mat_rows, mat_cols))
+    ct_shape = (num_cts, num_slots)
 
     print("Matrix layout")
     ctx = isl.Context()
@@ -64,26 +86,11 @@ if __name__ == "__main__":
     diagonal_matrix_layout = isl.Map(layout_map_str, ctx)
     print(diagonal_matrix_layout)
 
-    print("Enumerating: ")
-    for point in enumerate(diagonal_matrix_layout.range().to_union_set()):
-        print(point)
+    print("Applied: ")
+    print(apply_layout(diagonal_matrix_layout, data, ct_shape))
 
-    print("Evaluating at row=1, col=2: ")
-    values = {"row": 1, "col": 2}
-    sub_map = evaluate_domain(diagonal_matrix_layout, values)
-    print(f"sub map is {sub_map}")
-    # should be [1, 1], [1, 5]
-    for point in enumerate(sub_map.domain().to_union_set()):
-        print(point)
-
-    print("Evaluating at ct=0, slot=1: ")
-    values = {"ct": 0, "slot": 1}
-    sub_map = evaluate_codomain(diagonal_matrix_layout, values)
-    print(f"sub map is {sub_map}")
-    # should be [1, 1]
-    for point in enumerate(sub_map.domain().to_union_set()):
-        print(point)
-
+    vec_data = np.arange(mat_cols)
+    vec_ct_shape = (num_slots,)
     print("Vector 1 layout")
     vec_layout1_str = f"""
         {{ [v] -> [slot] :
@@ -94,6 +101,8 @@ if __name__ == "__main__":
     """
     vec_layout1 = isl.Map(vec_layout1_str, ctx)
     print(vec_layout1)
+    print("Vector 1 layout applied:")
+    print(apply_layout(vec_layout1, vec_data, vec_ct_shape))
 
     print("Vector 2 layout")
     vec_layout2_str = f"""
@@ -105,17 +114,21 @@ if __name__ == "__main__":
     """
     vec_layout2 = isl.Map(vec_layout2_str, ctx)
     print(vec_layout2)
+    print("Vector 2 layout applied:")
+    print(apply_layout(vec_layout2, vec_data, vec_ct_shape))
+
 
     print("vec conversion layout")
     # both are v -> slot, and we want v->v
     convert_1_to_2 = vec_layout2.apply_range(vec_layout1.reverse())
     print(convert_1_to_2)
 
-    # sub_map = evaluate_domain(convert_1_to_2, {"slot": 1})
-    # for point in enumerate(sub_map.domain().to_union_set()):
-    #    print(point)
+    print("Vector conversion layout applied:")
+    print(apply_layout(convert_1_to_2, vec_data, (mat_cols,)))
 
     hoisted = apply_to_domain_dimension(diagonal_matrix_layout, convert_1_to_2, 1)
 
     print("Hoisted layout:")
     print(hoisted)
+    print("Applied:")
+    print(apply_layout(hoisted, data, ct_shape))
